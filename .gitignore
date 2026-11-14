@@ -1,0 +1,24 @@
+# Go
+/bin/
+*.exe
+*.test
+*.out
+vendor/
+
+# Env / secrets
+.env
+.env.*
+!.env.example
+*.local.toml
+
+# Editor / OS
+.idea/
+.vscode/
+.DS_Store
+
+# Build
+/dist/
+
+# Sidecar runtime secrets — holds every provider API key + relay credentials.
+# The .example template is tracked; the filled-in file must never be.
+deploy/sidecar/sidecar*.env

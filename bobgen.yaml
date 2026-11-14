@@ -1,0 +1,20 @@
+psql:
+  dsn: ${PSQL_DSN}
+  schemas: ["public"]
+  except:
+    # Migration tracking (golang-migrate)
+    "public.schema_migrations":
+  concurrency: 10
+
+plugins:
+  dbinfo:
+    destination: "internal/infra/bob/dbinfo"
+    pkgname: "dbinfo"
+  models:
+    destination: "internal/infra/bob/models"
+    pkgname: "models"
+  factory:
+    disabled: true
+  dberrors:
+    destination: "internal/infra/bob/dberrors"
+    pkgname: "dberrors"

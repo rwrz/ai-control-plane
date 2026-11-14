@@ -1,0 +1,1275 @@
+{
+  "uid": "ai-control-plane-usage",
+  "title": "AI Control Plane \u2014 Usage & Cost",
+  "description": "Per-tenant AI spend from the usage_events ledger. Unpriced calls are surfaced separately: a model with no pricing entry records cost_usd=0 with cost_known=false, so whenever that count is non-zero the totals here understate real spend.",
+  "tags": [
+    "ai",
+    "cost",
+    "ai-control-plane"
+  ],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "5m",
+  "time": {
+    "from": "now-7d",
+    "to": "now"
+  },
+  "templating": {
+    "list": [
+      {
+        "type": "datasource",
+        "name": "datasource",
+        "label": "Datasource",
+        "query": "grafana-postgresql-datasource",
+        "current": {},
+        "hide": 0
+      },
+      {
+        "type": "query",
+        "name": "tenant",
+        "label": "Tenant",
+        "datasource": "${datasource}",
+        "query": "SELECT DISTINCT tenant FROM usage_events ORDER BY 1",
+        "refresh": 1,
+        "includeAll": true,
+        "multi": true,
+        "current": {
+          "selected": true,
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        },
+        "options": [],
+        "allValue": null
+      },
+      {
+        "type": "textbox",
+        "name": "user",
+        "label": "User",
+        "description": "Exact subject_user id; empty means all users. Free text rather than a dropdown: enumerating ids would scan every row of usage_events, and the list is unbounded.",
+        "query": "",
+        "current": {
+          "selected": false,
+          "text": "",
+          "value": ""
+        },
+        "options": [],
+        "hide": 0,
+        "skipUrlSync": false
+      },
+      {
+        "type": "query",
+        "name": "module",
+        "label": "Module",
+        "datasource": "${datasource}",
+        "query": "SELECT DISTINCT coalesce(nullif(module, ''), '(unattributed)') FROM usage_events ORDER BY 1",
+        "refresh": 1,
+        "includeAll": true,
+        "multi": true,
+        "current": {
+          "selected": true,
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        },
+        "options": [],
+        "allValue": null
+      },
+      {
+        "type": "query",
+        "name": "feature",
+        "label": "Feature",
+        "datasource": "${datasource}",
+        "query": "SELECT DISTINCT coalesce(nullif(feature, ''), '(unlabelled)') FROM usage_events WHERE tenant IN ($tenant) AND coalesce(nullif(module, ''), '(unattributed)') IN ($module) ORDER BY 1",
+        "refresh": 1,
+        "includeAll": true,
+        "multi": true,
+        "current": {
+          "selected": true,
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        },
+        "options": [],
+        "allValue": null
+      },
+      {
+        "type": "query",
+        "name": "modality",
+        "label": "Modality",
+        "datasource": "${datasource}",
+        "query": "SELECT DISTINCT modality FROM usage_events ORDER BY 1",
+        "refresh": 1,
+        "includeAll": true,
+        "multi": true,
+        "current": {
+          "selected": true,
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        },
+        "options": [],
+        "allValue": null
+      },
+      {
+        "type": "query",
+        "name": "entity_type",
+        "label": "Entity type",
+        "datasource": "${datasource}",
+        "query": "SELECT DISTINCT coalesce(entity_type, '(none)') FROM usage_events ORDER BY 1",
+        "refresh": 1,
+        "includeAll": true,
+        "multi": true,
+        "current": {
+          "selected": true,
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        },
+        "options": [],
+        "allValue": null
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Total cost",
+      "datasource": "${datasource}",
+      "gridPos": {
+        "h": 4,
+        "w": 5,
+        "x": 0,
+        "y": 0
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD",
+          "decimals": 4,
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "text"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": "${datasource}",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT coalesce(sum(cost_usd), 0) AS \"Total cost\"\nFROM usage_events\nWHERE tenant IN ($tenant)\n  AND coalesce(nullif(module, ''), '(unattributed)') IN ($module)\n  AND coalesce(nullif(feature, ''), '(unlabelled)') IN ($feature)\n  AND (${user:sqlstring} = '' OR subject_user = ${user:sqlstring})\n  AND modality IN ($modality)\n  AND coalesce(entity_type, '(none)') IN ($entity_type)\n  AND $__timeFilter(occurred_at)"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Unpriced calls",
+      "description": "Calls whose model had no pricing entry (cost_known=false). Their real cost is UNKNOWN, not zero \u2014 any non-zero value here means 'Total cost' is an underestimate. Fix by adding the model to pricing.toml.",
+      "datasource": "${datasource}",
+      "gridPos": {
+        "h": 4,
+        "w": 5,
+        "x": 5,
+        "y": 0
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "graphMode": "none"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": "${datasource}",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT coalesce(sum(CASE WHEN cost_known THEN 0 ELSE 1 END), 0) AS \"Unpriced calls\"\nFROM usage_events\nWHERE tenant IN ($tenant)\n  AND coalesce(nullif(module, ''), '(unattributed)') IN ($module)\n  AND coalesce(nullif(feature, ''), '(unlabelled)') IN ($feature)\n  AND (${user:sqlstring} = '' OR subject_user = ${user:sqlstring})\n  AND modality IN ($modality)\n  AND coalesce(entity_type, '(none)') IN ($entity_type)\n  AND $__timeFilter(occurred_at)"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Calls",
+      "datasource": "${datasource}",
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 10,
+        "y": 0
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": "${datasource}",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT count(*) AS \"Calls\"\nFROM usage_events\nWHERE tenant IN ($tenant)\n  AND coalesce(nullif(module, ''), '(unattributed)') IN ($module)\n  AND coalesce(nullif(feature, ''), '(unlabelled)') IN ($feature)\n  AND (${user:sqlstring} = '' OR subject_user = ${user:sqlstring})\n  AND modality IN ($modality)\n  AND coalesce(entity_type, '(none)') IN ($entity_type)\n  AND $__timeFilter(occurred_at)"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Prompt cache hit rate (LLM)",
+      "description": "Share of input tokens served from the provider's prompt cache. Cached input bills at roughly a tenth of the normal input rate, so this is the cheapest lever on spend \u2014 a high rate on a large shared prompt is where the savings are.",
+      "datasource": "${datasource}",
+      "gridPos": {
+        "h": 4,
+        "w": 5,
+        "x": 14,
+        "y": 0
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 0.25
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "graphMode": "none"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": "${datasource}",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "-- LLM only: speech and image rows have no prompt tokens, and including them\n-- would drag this toward zero for reasons that have nothing to do with caching.\n-- Both operands are cast: CockroachDB's sum() over BIGINT yields DECIMAL,\n-- and it rejects float/decimal division that Postgres would silently coerce.\nSELECT CASE WHEN coalesce(sum(input_tokens), 0) = 0 THEN 0\n            ELSE sum(cached_input_tokens)::float / sum(input_tokens)::float END AS \"Cache hit rate\"\nFROM usage_events\nWHERE tenant IN ($tenant)\n  AND coalesce(nullif(module, ''), '(unattributed)') IN ($module)\n  AND coalesce(nullif(feature, ''), '(unlabelled)') IN ($feature)\n  AND (${user:sqlstring} = '' OR subject_user = ${user:sqlstring})\n  AND modality = 'llm'\n  AND coalesce(entity_type, '(none)') IN ($entity_type)\n  AND $__timeFilter(occurred_at)"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "Unattributed calls",
+      "description": "Calls with no user recorded. Expected for cron/backfill work; unexpectedly high means a caller is dropping the request context before the AI call and per-user cost is being lost.",
+      "datasource": "${datasource}",
+      "gridPos": {
+        "h": 4,
+        "w": 5,
+        "x": 19,
+        "y": 0
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "orange"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "graphMode": "none"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": "${datasource}",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT count(*) AS \"Unattributed\"\nFROM usage_events\nWHERE tenant IN ($tenant)\n  AND coalesce(nullif(module, ''), '(unattributed)') IN ($module)\n  AND coalesce(nullif(feature, ''), '(unlabelled)') IN ($feature)\n  AND (${user:sqlstring} = '' OR subject_user = ${user:sqlstring})\n  AND modality IN ($modality)\n  AND coalesce(entity_type, '(none)') IN ($entity_type)\n  AND $__timeFilter(occurred_at)\n  AND coalesce(subject_user, '') = ''"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Cost over time, by module",
+      "datasource": "${datasource}",
+      "gridPos": {
+        "h": 9,
+        "w": 24,
+        "x": 0,
+        "y": 4
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD",
+          "decimals": 5,
+          "custom": {
+            "drawStyle": "bars",
+            "stacking": {
+              "mode": "normal"
+            },
+            "fillOpacity": 70,
+            "lineWidth": 0
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "sum"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": "${datasource}",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT $__timeGroupAlias(occurred_at, $__interval),\n       coalesce(nullif(module, ''), '(unattributed)') AS metric,\n       sum(cost_usd) AS cost\nFROM usage_events\nWHERE tenant IN ($tenant)\n  AND coalesce(nullif(module, ''), '(unattributed)') IN ($module)\n  AND coalesce(nullif(feature, ''), '(unlabelled)') IN ($feature)\n  AND (${user:sqlstring} = '' OR subject_user = ${user:sqlstring})\n  AND modality IN ($modality)\n  AND coalesce(entity_type, '(none)') IN ($entity_type)\n  AND $__timeFilter(occurred_at)\nGROUP BY 1, 2\nORDER BY 1"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "type": "bargauge",
+      "title": "Cost by module",
+      "datasource": "${datasource}",
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 13
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD",
+          "decimals": 5,
+          "color": {
+            "mode": "continuous-GrYlRd"
+          },
+          "min": 0,
+          "displayName": "${__cell_0}"
+        },
+        "overrides": []
+      },
+      "options": {
+        "displayMode": "gradient",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": true
+        },
+        "namePlacement": "left"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": "${datasource}",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT coalesce(nullif(module, ''), '(unattributed)') AS module,\n       sum(cost_usd) AS cost\nFROM usage_events\nWHERE tenant IN ($tenant)\n  AND coalesce(nullif(module, ''), '(unattributed)') IN ($module)\n  AND coalesce(nullif(feature, ''), '(unlabelled)') IN ($feature)\n  AND (${user:sqlstring} = '' OR subject_user = ${user:sqlstring})\n  AND modality IN ($modality)\n  AND coalesce(entity_type, '(none)') IN ($entity_type)\n  AND $__timeFilter(occurred_at)\nGROUP BY 1\nORDER BY cost DESC"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "type": "bargauge",
+      "title": "Cost by feature",
+      "datasource": "${datasource}",
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 13
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD",
+          "decimals": 5,
+          "color": {
+            "mode": "continuous-BlPu"
+          },
+          "min": 0,
+          "displayName": "${__cell_0}"
+        },
+        "overrides": []
+      },
+      "options": {
+        "displayMode": "gradient",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": true
+        },
+        "namePlacement": "left"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": "${datasource}",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT coalesce(nullif(feature, ''), '(unlabelled)') AS feature,\n       sum(cost_usd) AS cost\nFROM usage_events\nWHERE tenant IN ($tenant)\n  AND coalesce(nullif(module, ''), '(unattributed)') IN ($module)\n  AND coalesce(nullif(feature, ''), '(unlabelled)') IN ($feature)\n  AND (${user:sqlstring} = '' OR subject_user = ${user:sqlstring})\n  AND modality IN ($modality)\n  AND coalesce(entity_type, '(none)') IN ($entity_type)\n  AND $__timeFilter(occurred_at)\nGROUP BY 1\nORDER BY cost DESC"
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "type": "piechart",
+      "title": "Cost by provider",
+      "datasource": "${datasource}",
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 13
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD",
+          "decimals": 5,
+          "displayName": "${__cell_0}"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "values": [
+            "value"
+          ]
+        },
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": true
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": "${datasource}",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT provider, sum(cost_usd) AS cost\nFROM usage_events\nWHERE tenant IN ($tenant)\n  AND coalesce(nullif(module, ''), '(unattributed)') IN ($module)\n  AND coalesce(nullif(feature, ''), '(unlabelled)') IN ($feature)\n  AND (${user:sqlstring} = '' OR subject_user = ${user:sqlstring})\n  AND modality IN ($modality)\n  AND coalesce(entity_type, '(none)') IN ($entity_type)\n  AND $__timeFilter(occurred_at)\nGROUP BY 1\nORDER BY cost DESC"
+        }
+      ]
+    },
+    {
+      "id": 10,
+      "type": "table",
+      "title": "Top users by cost",
+      "datasource": "${datasource}",
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 0,
+        "y": 21
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "cost_usd"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "currencyUSD"
+              },
+              {
+                "id": "decimals",
+                "value": 5
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-background",
+                  "mode": "gradient"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "sortBy": [
+          {
+            "displayName": "cost_usd",
+            "desc": true
+          }
+        ]
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": "${datasource}",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "-- Volume is reported in the unit each call was billed in: tokens for LLM,\n-- seconds for speech-to-text, characters for text-to-speech. A pronunciation\n-- user has no tokens at all, so a tokens-only column would read as broken.\nSELECT coalesce(nullif(subject_user, ''), '(unattributed)') AS \"user\",\n       count(*) AS calls,\n       sum(input_tokens + output_tokens) AS tokens,\n       round(sum(audio_seconds)::numeric, 1) AS audio_seconds,\n       sum(characters) AS characters,\n       sum(cost_usd) AS cost_usd\nFROM usage_events\nWHERE tenant IN ($tenant)\n  AND coalesce(nullif(module, ''), '(unattributed)') IN ($module)\n  AND coalesce(nullif(feature, ''), '(unlabelled)') IN ($feature)\n  AND (${user:sqlstring} = '' OR subject_user = ${user:sqlstring})\n  AND modality IN ($modality)\n  AND coalesce(entity_type, '(none)') IN ($entity_type)\n  AND $__timeFilter(occurred_at)\nGROUP BY 1\nORDER BY cost_usd DESC\nLIMIT 50"
+        }
+      ]
+    },
+    {
+      "id": 11,
+      "type": "table",
+      "title": "By model",
+      "description": "unpriced > 0 means this model is missing from pricing.toml and its spend is not being counted anywhere.",
+      "datasource": "${datasource}",
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 12,
+        "y": 21
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "cost_usd"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "currencyUSD"
+              },
+              {
+                "id": "decimals",
+                "value": 5
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "unpriced"
+            },
+            "properties": [
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-background"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "red",
+                      "value": 1
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "sortBy": [
+          {
+            "displayName": "cost_usd",
+            "desc": true
+          }
+        ]
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": "${datasource}",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "-- One volume column, in whatever unit the model bills. unit is GROUPED rather\n-- than reduced with max(): a model does NOT always bill one way. scribe_v2\n-- records 312,861 calls in 'seconds' and 143 in 'tokens', and max() returns\n-- 'tokens' because it sorts later \u2014 reporting the volume of the biggest STT\n-- model as a token count of zero and hiding 1.8M seconds of audio. A model that\n-- genuinely bills one way still produces exactly one row.\nSELECT model,\n       provider,\n       max(modality) AS modality,\n       count(*) AS calls,\n       sum(CASE WHEN cost_known THEN 0 ELSE 1 END) AS unpriced,\n       CASE unit\n         WHEN 'seconds'    THEN round(sum(audio_seconds)::numeric, 1)\n         WHEN 'characters' THEN sum(characters)::numeric\n         ELSE sum(input_tokens + output_tokens)::numeric\n       END AS volume,\n       unit,\n       sum(cost_usd) AS cost_usd\nFROM usage_events\nWHERE tenant IN ($tenant)\n  AND coalesce(nullif(module, ''), '(unattributed)') IN ($module)\n  AND coalesce(nullif(feature, ''), '(unlabelled)') IN ($feature)\n  AND (${user:sqlstring} = '' OR subject_user = ${user:sqlstring})\n  AND modality IN ($modality)\n  AND coalesce(entity_type, '(none)') IN ($entity_type)\n  AND $__timeFilter(occurred_at)\nGROUP BY 1, 2, unit\nORDER BY cost_usd DESC"
+        }
+      ]
+    },
+    {
+      "type": "table",
+      "title": "Volume by modality",
+      "datasource": "${datasource}",
+      "description": "What each modality actually consumed, in its own billing unit. Speech is billed by the second and TTS by the character, so a single volume number across modalities would be meaningless.",
+      "gridPos": {
+        "h": 8,
+        "w": 14,
+        "x": 0,
+        "y": 30
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto"
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "cost_usd"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "currencyUSD"
+              },
+              {
+                "id": "decimals",
+                "value": 4
+              }
+            ]
+          }
+        ]
+      },
+      "targets": [
+        {
+          "format": "table",
+          "rawSql": "SELECT modality,\n       count(*) AS calls,\n       sum(input_tokens + output_tokens) AS tokens,\n       round(sum(audio_seconds)::numeric, 1) AS audio_seconds,\n       sum(characters) AS characters,\n       sum(CASE WHEN cost_known THEN 0 ELSE 1 END) AS unpriced,\n       sum(cost_usd) AS cost_usd\nFROM usage_events\nWHERE tenant IN ($tenant)\n  AND coalesce(nullif(module, ''), '(unattributed)') IN ($module)\n  AND coalesce(nullif(feature, ''), '(unlabelled)') IN ($feature)\n  AND (${user:sqlstring} = '' OR subject_user = ${user:sqlstring})\n  AND modality IN ($modality)\n  AND coalesce(entity_type, '(none)') IN ($entity_type)\n  AND $__timeFilter(occurred_at)\nGROUP BY 1\nORDER BY cost_usd DESC",
+          "refId": "A",
+          "datasource": "${datasource}"
+        }
+      ]
+    },
+    {
+      "type": "piechart",
+      "title": "Cost by modality",
+      "datasource": "${datasource}",
+      "description": "Split of spend between LLM, speech-to-text and text-to-speech.",
+      "gridPos": {
+        "h": 8,
+        "w": 10,
+        "x": 14,
+        "y": 30
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD",
+          "decimals": 4,
+          "displayName": "${__cell_0}"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "values": [
+            "value"
+          ]
+        },
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": true
+        }
+      },
+      "targets": [
+        {
+          "format": "table",
+          "rawSql": "SELECT modality, sum(cost_usd) AS cost\nFROM usage_events\nWHERE tenant IN ($tenant)\n  AND coalesce(nullif(module, ''), '(unattributed)') IN ($module)\n  AND coalesce(nullif(feature, ''), '(unlabelled)') IN ($feature)\n  AND (${user:sqlstring} = '' OR subject_user = ${user:sqlstring})\n  AND modality IN ($modality)\n  AND coalesce(entity_type, '(none)') IN ($entity_type)\n  AND $__timeFilter(occurred_at)\nGROUP BY 1\nORDER BY cost DESC",
+          "refId": "A",
+          "datasource": "${datasource}"
+        }
+      ]
+    },
+    {
+      "id": 20,
+      "type": "stat",
+      "title": "Avg cost per entity",
+      "datasource": "${datasource}",
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 0,
+        "y": 38
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD",
+          "decimals": 5,
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "text"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": "${datasource}",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "-- An entity costs what all of its calls cost together \u2014 LLM, STT and TTS \u2014 so\n-- the mean has to be taken over entities, AFTER summing each one. Averaging\n-- cost_usd across rows answers a different question: the cost of an average\n-- CALL, which for a live conversation is dominated by hundreds of tiny STT flushes\n-- and is roughly three orders of magnitude smaller.\n--\n-- Rows with no entity are excluded rather than folded into one bucket. Cron,\n-- backfills and request-shaped traffic would otherwise collapse into a single\n-- enormous \"entity\" whose cost is the sum of all of them. Grouped by the\n-- pair because an id is only unique within its type.\nSELECT avg(entity_cost) AS \"Avg cost\"\nFROM (\n  SELECT entity_type, entity_id,\n         sum(cost_usd) AS entity_cost\n  FROM usage_events\n  WHERE tenant IN ($tenant)\n  AND coalesce(nullif(module, ''), '(unattributed)') IN ($module)\n  AND coalesce(nullif(feature, ''), '(unlabelled)') IN ($feature)\n  AND (${user:sqlstring} = '' OR subject_user = ${user:sqlstring})\n  AND modality IN ($modality)\n  AND coalesce(entity_type, '(none)') IN ($entity_type)\n  AND coalesce(entity_id, '') <> ''\n  AND $__timeFilter(occurred_at)\n  GROUP BY entity_type, entity_id\n) s"
+        }
+      ],
+      "description": "An entity is one unit of work of the selected Entity type. Calls with no entity are left out of this row. Selecting several types averages them together."
+    },
+    {
+      "id": 21,
+      "type": "stat",
+      "title": "Median cost per entity",
+      "datasource": "${datasource}",
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 6,
+        "y": 38
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD",
+          "decimals": 5,
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "text"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": "${datasource}",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "-- Read this next to the mean. Entity cost is long-tailed \u2014 one long\n-- entity sits beside hundreds of short ones \u2014 so the mean tracks the tail and\n-- the median tracks the typical entity. mean >> median means a handful of\n-- entities are carrying the bill, and the mean is the wrong number to size\n-- per-user economics with.\n--\n-- The cast is required, not cosmetic: percentile_cont takes double precision,\n-- and cost_usd is NUMERIC.\nSELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY entity_cost::float)\n         AS \"Median cost\"\nFROM (\n  SELECT entity_type, entity_id,\n         sum(cost_usd) AS entity_cost\n  FROM usage_events\n  WHERE tenant IN ($tenant)\n  AND coalesce(nullif(module, ''), '(unattributed)') IN ($module)\n  AND coalesce(nullif(feature, ''), '(unlabelled)') IN ($feature)\n  AND (${user:sqlstring} = '' OR subject_user = ${user:sqlstring})\n  AND modality IN ($modality)\n  AND coalesce(entity_type, '(none)') IN ($entity_type)\n  AND coalesce(entity_id, '') <> ''\n  AND $__timeFilter(occurred_at)\n  GROUP BY entity_type, entity_id\n) s"
+        }
+      ]
+    },
+    {
+      "id": 22,
+      "type": "stat",
+      "title": "Entities",
+      "datasource": "${datasource}",
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 12,
+        "y": 38
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "text"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": "${datasource}",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT count(DISTINCT (entity_type, entity_id)) AS \"Count\"\nFROM usage_events\nWHERE tenant IN ($tenant)\n  AND coalesce(nullif(module, ''), '(unattributed)') IN ($module)\n  AND coalesce(nullif(feature, ''), '(unlabelled)') IN ($feature)\n  AND (${user:sqlstring} = '' OR subject_user = ${user:sqlstring})\n  AND modality IN ($modality)\n  AND coalesce(entity_type, '(none)') IN ($entity_type)\n  AND coalesce(entity_id, '') <> ''\n  AND $__timeFilter(occurred_at)"
+        }
+      ]
+    },
+    {
+      "id": 23,
+      "type": "stat",
+      "title": "Avg entity length",
+      "datasource": "${datasource}",
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 18,
+        "y": 38
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "decimals": 1,
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "text"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": "${datasource}",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "-- Wall clock from an entity's first metered call to its last. For an entity\n-- metered live this is a FLOOR on its length: the relay only sees it\n-- while it is calling a provider, so silence before the first utterance and\n-- after the last is invisible. For one worked on after the fact\n-- \u2014 transcribed or reported later \u2014 it is how long that work was spread out.\n--\n-- It is here to tell \"entities got longer\" apart from \"entities got pricier\"\n-- when the average cost moves \u2014 not to bill anyone by the minute. Divided by\n-- nothing: the panel unit is seconds, so Grafana does the formatting and no\n-- float/decimal division is introduced.\nSELECT avg(extract(epoch FROM (ended_at - started_at))) AS \"Avg length\"\nFROM (\n  SELECT entity_type, entity_id,\n         min(occurred_at) AS started_at,\n         max(occurred_at) AS ended_at\n  FROM usage_events\n  WHERE tenant IN ($tenant)\n  AND coalesce(nullif(module, ''), '(unattributed)') IN ($module)\n  AND coalesce(nullif(feature, ''), '(unlabelled)') IN ($feature)\n  AND (${user:sqlstring} = '' OR subject_user = ${user:sqlstring})\n  AND modality IN ($modality)\n  AND coalesce(entity_type, '(none)') IN ($entity_type)\n  AND coalesce(entity_id, '') <> ''\n  AND $__timeFilter(occurred_at)\n  GROUP BY entity_type, entity_id\n) s"
+        }
+      ]
+    },
+    {
+      "id": 24,
+      "type": "timeseries",
+      "title": "Avg cost per entity over time",
+      "datasource": "${datasource}",
+      "gridPos": {
+        "h": 8,
+        "w": 14,
+        "x": 0,
+        "y": 42
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD",
+          "decimals": 5,
+          "min": 0,
+          "custom": {
+            "fillOpacity": 10,
+            "showPoints": "auto",
+            "lineWidth": 2
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": "${datasource}",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "-- Each entity is bucketed by when it STARTED, so it is counted once at a\n-- single point instead of being smeared across every bucket it touched.\n--\n-- Entities straddling the edge of the time range are truncated by\n-- $__timeFilter and read cheaper than they were. That is negligible over a day\n-- and material over an hour: at short ranges this line understates.\nSELECT $__timeGroupAlias(started_at, $__interval),\n       avg(entity_cost) AS \"Avg cost\"\nFROM (\n  SELECT entity_type, entity_id,\n         min(occurred_at) AS started_at,\n         sum(cost_usd) AS entity_cost\n  FROM usage_events\n  WHERE tenant IN ($tenant)\n  AND coalesce(nullif(module, ''), '(unattributed)') IN ($module)\n  AND coalesce(nullif(feature, ''), '(unlabelled)') IN ($feature)\n  AND (${user:sqlstring} = '' OR subject_user = ${user:sqlstring})\n  AND modality IN ($modality)\n  AND coalesce(entity_type, '(none)') IN ($entity_type)\n  AND coalesce(entity_id, '') <> ''\n  AND $__timeFilter(occurred_at)\n  GROUP BY entity_type, entity_id\n) s\nGROUP BY 1\nORDER BY 1"
+        }
+      ]
+    },
+    {
+      "id": 25,
+      "type": "table",
+      "title": "Where an entity's money goes",
+      "datasource": "${datasource}",
+      "gridPos": {
+        "h": 8,
+        "w": 10,
+        "x": 14,
+        "y": 42
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "total_usd"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "currencyUSD"
+              },
+              {
+                "id": "decimals",
+                "value": 4
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "avg_per_entity"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "currencyUSD"
+              },
+              {
+                "id": "decimals",
+                "value": 5
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": "${datasource}",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "-- Each modality's share of the AVERAGE entity \u2014 denominator is every entity\n-- in the window, not just the entities that used that modality. An entity that\n-- made no TTS call spent zero on TTS, and dividing by only the entities that did\n-- use it would overstate what TTS adds to a typical one.\n--\n-- entities_using is kept alongside precisely so the two are distinguishable: a\n-- modality used by half the entities at twice the cost looks identical in\n-- avg_per_entity to one used by all of them at half.\nWITH s AS (\n  SELECT entity_type, entity_id, modality, cost_usd\n  FROM usage_events\n  WHERE tenant IN ($tenant)\n  AND coalesce(nullif(module, ''), '(unattributed)') IN ($module)\n  AND coalesce(nullif(feature, ''), '(unlabelled)') IN ($feature)\n  AND (${user:sqlstring} = '' OR subject_user = ${user:sqlstring})\n  AND modality IN ($modality)\n  AND coalesce(entity_type, '(none)') IN ($entity_type)\n  AND coalesce(entity_id, '') <> ''\n  AND $__timeFilter(occurred_at)\n),\nn AS (SELECT count(DISTINCT (entity_type, entity_id)) AS entities FROM s)\nSELECT s.modality,\n       count(DISTINCT (s.entity_type, s.entity_id)) AS entities_using,\n       round(sum(s.cost_usd), 4) AS total_usd,\n       round(sum(s.cost_usd) / nullif(n.entities, 0), 6) AS avg_per_entity\nFROM s CROSS JOIN n\nGROUP BY s.modality, n.entities\nORDER BY total_usd DESC"
+        }
+      ]
+    },
+    {
+      "id": 26,
+      "type": "table",
+      "title": "Effective rate by model",
+      "description": "What each model actually charged per unit of work, derived from the ledger rather than read from pricing.toml. This is the number that moves when a provider changes price, a caller switches model, or a surcharge lands that the rate table does not know about.",
+      "datasource": "${datasource}",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 50
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "cost_usd"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "currencyUSD"
+              },
+              {
+                "id": "decimals",
+                "value": 2
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "rate"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "currencyUSD"
+              },
+              {
+                "id": "decimals",
+                "value": 2
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": "${datasource}",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "-- Each modality bills in a different unit, so there is no single rate column\n-- that would mean anything: tokens are priced per million, characters per\n-- million, audio per hour. The unit is carried beside the number so the two are\n-- never read apart.\n--\n-- This is the panel that makes a provider switch legible. Two TTS models both\n-- priced \"per character\" are not comparable until the rate is computed, and the\n-- gap can be large \u2014 a 6x spread between two voices is not visible anywhere in\n-- a cost total.\n--\n-- unit is GROUPED, not aggregated with max(). A model does not always bill one\n-- way: scribe_v2 records 312,861 calls in 'seconds' and 143 in 'tokens', and\n-- max() returns 'tokens' because it sorts later \u2014 which would compute the rate\n-- of the biggest STT model from a token count of zero and print NULL. Grouping\n-- keeps each row internally consistent and makes the odd 143 visible instead of\n-- letting them corrupt the row that matters.\n--\n-- Those stray rows are real: a call with a provider-stated cost and no\n-- measurable quantity records the default unit. A NULL rate against a non-zero\n-- cost is the signature, and it is worth noticing rather than hiding.\n--\n-- Every division is guarded by nullif, so such a row yields an empty cell\n-- rather than a divide-by-zero that blanks the whole panel.\nSELECT model,\n       provider,\n       unit,\n       count(*) AS calls,\n       sum(cost_usd) AS cost_usd,\n       CASE unit\n         WHEN 'tokens'     THEN round(sum(cost_usd) / nullif(sum(input_tokens + output_tokens), 0) * 1000000, 2)\n         WHEN 'characters' THEN round(sum(cost_usd) / nullif(sum(characters), 0) * 1000000, 2)\n         WHEN 'seconds'    THEN round(sum(cost_usd) / nullif(sum(audio_seconds), 0) * 3600, 2)\n       END AS rate,\n       CASE unit\n         WHEN 'tokens'     THEN '$/Mtok'\n         WHEN 'characters' THEN '$/Mchar'\n         WHEN 'seconds'    THEN '$/audio-hour'\n       END AS rate_unit\nFROM usage_events\nWHERE tenant IN ($tenant)\n  AND coalesce(nullif(module, ''), '(unattributed)') IN ($module)\n  AND coalesce(nullif(feature, ''), '(unlabelled)') IN ($feature)\n  AND (${user:sqlstring} = '' OR subject_user = ${user:sqlstring})\n  AND modality IN ($modality)\n  AND coalesce(entity_type, '(none)') IN ($entity_type)\n  AND $__timeFilter(occurred_at)\nGROUP BY 1, 2, 3\nORDER BY cost_usd DESC"
+        }
+      ]
+    },
+    {
+      "id": 27,
+      "type": "table",
+      "title": "Prompt cache by module (LLM)",
+      "description": "Where the caching lever actually is. The headline hit-rate stat is one number for the whole fleet; this splits it by module and puts spend beside it, because a low rate only matters in proportion to what the module spends.",
+      "datasource": "${datasource}",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 50
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "cost_usd"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "currencyUSD"
+              },
+              {
+                "id": "decimals",
+                "value": 2
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "hit_rate"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percentunit"
+              },
+              {
+                "id": "decimals",
+                "value": 1
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "gauge",
+                  "mode": "gradient"
+                }
+              },
+              {
+                "id": "min",
+                "value": 0
+              },
+              {
+                "id": "max",
+                "value": 1
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "sortBy": [
+          {
+            "desc": true,
+            "displayName": "cost_usd"
+          }
+        ]
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": "${datasource}",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "-- Cached input bills at roughly a tenth of the normal input rate, so the\n-- product of spend and (1 - hit_rate) is the money still on the table. Sorted\n-- by spend rather than by rate deliberately: a module at 0% that spends nothing\n-- is noise, and one at 5% that is third on the bill is the whole point.\n--\n-- LLM only. Speech and image rows carry no prompt tokens and would sit at a\n-- permanent 0% for reasons that have nothing to do with caching.\n--\n-- Both operands cast: CRDB's sum() over BIGINT yields DECIMAL and it rejects\n-- the float/decimal division Postgres would silently coerce. HAVING drops\n-- modules with no input tokens at all rather than showing them as 0%.\nSELECT coalesce(nullif(module, ''), '(unattributed)') AS module,\n       sum(input_tokens) AS input_tokens,\n       CASE WHEN sum(input_tokens) = 0 THEN 0\n            ELSE sum(cached_input_tokens)::float / sum(input_tokens)::float\n       END AS hit_rate,\n       sum(cost_usd) AS cost_usd\nFROM usage_events\nWHERE tenant IN ($tenant)\n  AND coalesce(nullif(module, ''), '(unattributed)') IN ($module)\n  AND coalesce(nullif(feature, ''), '(unlabelled)') IN ($feature)\n  AND (${user:sqlstring} = '' OR subject_user = ${user:sqlstring})\n  AND modality IN ($modality)\n  AND coalesce(entity_type, '(none)') IN ($entity_type)\n  AND $__timeFilter(occurred_at)\n  AND modality = 'llm'\nGROUP BY 1\nHAVING sum(input_tokens) > 0\nORDER BY cost_usd DESC"
+        }
+      ]
+    },
+    {
+      "id": 28,
+      "type": "table",
+      "title": "Cost by feature",
+      "description": "feature is the finest label callers attach \u2014 33 distinct values against module\u2019s 20 \u2014 and it is the level at which a cost is attributable to a piece of product. Cost per call is the column the bar gauge cannot show.",
+      "datasource": "${datasource}",
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 58
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "cost_usd"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "currencyUSD"
+              },
+              {
+                "id": "decimals",
+                "value": 2
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "cost_per_call"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "currencyUSD"
+              },
+              {
+                "id": "decimals",
+                "value": 6
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": "${datasource}",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "-- Grouped by feature AND module, because a feature name is only unique within\n-- its module: speech_synthesis exists under the voice agent's coach module and under\n-- the backend's tts module, and they are different pieces of product with different bills.\n--\n-- cost_per_call is what the Cost-by-feature bar gauge cannot show. A feature can\n-- dominate the bill through volume or through price, and the two want different\n-- fixes: half a million cheap transcription calls and a few thousand expensive\n-- report generations both reach the top of a cost ranking, but only one of them\n-- is fixed by making the call cheaper.\n--\n-- max(modality) is a label, not an aggregate that means anything: a feature\n-- normally has exactly one. It is there so the unit of cost_per_call is\n-- readable without cross-referencing another panel.\nSELECT coalesce(nullif(feature, ''), '(unlabelled)') AS feature,\n       coalesce(nullif(module, ''), '(unattributed)') AS module,\n       max(modality) AS modality,\n       count(*) AS calls,\n       sum(cost_usd) AS cost_usd,\n       round(sum(cost_usd) / nullif(count(*), 0), 6) AS cost_per_call\nFROM usage_events\nWHERE tenant IN ($tenant)\n  AND coalesce(nullif(module, ''), '(unattributed)') IN ($module)\n  AND coalesce(nullif(feature, ''), '(unlabelled)') IN ($feature)\n  AND (${user:sqlstring} = '' OR subject_user = ${user:sqlstring})\n  AND modality IN ($modality)\n  AND coalesce(entity_type, '(none)') IN ($entity_type)\n  AND $__timeFilter(occurred_at)\nGROUP BY 1, 2\nORDER BY cost_usd DESC\nLIMIT 30"
+        }
+      ]
+    }
+  ]
+}

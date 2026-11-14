@@ -1,0 +1,1 @@
+DROP INDEX IF EXISTS idx_usage_events_tenant_subject_user_occurred_at;

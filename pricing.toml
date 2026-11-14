@@ -1,0 +1,318 @@
+# Per-model pricing in USD per million tokens. Update freely as providers
+# change pricing. Token counts come from the provider's own usage payload — no
+# estimation. Cost math (see internal/pricing):
+#
+#   uncached_input = input_tokens - cached_input_tokens
+#   cost = uncached_input      * input_per_mtok        / 1e6
+#        + cached_input_tokens * cached_input_per_mtok / 1e6
+#        + output_tokens       * output_per_mtok       / 1e6
+#
+# Model ids are version-pinned so a provider-side alias update can't silently
+# re-cost. Response model ids are normalized (dated snapshots stripped) before
+# lookup — see pricing.NormalizeModel.
+
+# --- OpenAI gpt-5.6 family (standard tier, rates confirmed 2026-07-31) -----
+#
+# These carry SHORT-CONTEXT rates (prompts under 272K tokens). OpenAI bills a
+# request whose input exceeds 272K at 2x input / 1.5x output, and this table has
+# one rate per model, so such a call under-bills. That is the safe direction —
+# a wrong high rate would over-charge every ordinary call to fix a rare one —
+# and no the agents service prompt comes near the threshold. Revisit if a long-context
+# consumer appears.
+#
+# The published cache-WRITE rate (luna $0.25/Mtok) has no column here either;
+# cache writes are billed by OpenAI as ordinary input tokens in the usage
+# payload, so they land on input_per_mtok.
+
+[models."gpt-5.6-sol"]
+input_per_mtok        = 5.00
+cached_input_per_mtok = 0.50
+output_per_mtok       = 30.00
+
+[models."gpt-5.6-terra"]
+input_per_mtok        = 2.00
+cached_input_per_mtok = 0.20
+output_per_mtok       = 12.00
+
+[models."gpt-5.6-luna"]
+input_per_mtok        = 0.20
+cached_input_per_mtok = 0.02
+output_per_mtok       = 1.20
+
+# gpt-6-luna is a different, cheaper model than gpt-5.6-luna, not a rename of it. Same
+# short-context caveat as above.
+[models."gpt-6-luna"]
+input_per_mtok        = 0.10
+cached_input_per_mtok = 0.01
+output_per_mtok       = 0.50
+
+[models."gpt-5"]
+input_per_mtok        = 1.25
+cached_input_per_mtok = 0.125
+output_per_mtok       = 10.00
+
+[models."gpt-5-mini"]
+input_per_mtok        = 0.25
+cached_input_per_mtok = 0.025
+output_per_mtok       = 2.00
+
+[models."gpt-4o-mini"]
+input_per_mtok        = 0.15
+cached_input_per_mtok = 0.075
+output_per_mtok       = 0.60
+
+# --- Gemini text family (rates confirmed 2026-08-17) -------------------
+#
+# ⚠️ TODO(2027-01-01): gemini-3.8-flash, gemini-3.7-flash and gemini-3.6-flash
+# are on introductory pricing that ENDS December 31, 2026 — every rate below
+# doubles on January 1, 2027 (input 0.75 -> 1.50, cached 0.075 -> 0.15, output
+# 3.75 -> 7.50). These entries carry the rate Google bills *today*; bump all
+# three models on that date or we silently under-bill by 2x.
+#
+# Google also charges cached-context *storage* ($0.50/Mtok/hour through
+# 2026-12-31, $1.00 after). There is no storage column here and the usage
+# payload doesn't report cache lifetime, so that portion is unmetered — same
+# as it has always been for the other Gemini entries.
+
+[models."gemini-3.8-flash"]
+input_per_mtok        = 0.75
+cached_input_per_mtok = 0.075
+output_per_mtok       = 3.75
+
+[models."gemini-3.7-flash"]
+input_per_mtok        = 0.75
+cached_input_per_mtok = 0.075
+output_per_mtok       = 3.75
+
+[models."gemini-3.6-flash"]
+input_per_mtok        = 0.75
+cached_input_per_mtok = 0.075
+output_per_mtok       = 3.75
+
+[models."gemini-3.5-flash"]
+input_per_mtok        = 1.50
+cached_input_per_mtok = 0.15
+output_per_mtok       = 9.00
+
+[models."gemini-3.5-flash-lite"]
+input_per_mtok        = 0.30
+cached_input_per_mtok = 0.03
+output_per_mtok       = 2.50
+
+[models."gemini-3.1-flash-lite"]
+input_per_mtok        = 0.25
+cached_input_per_mtok = 0.025
+output_per_mtok       = 1.50
+
+[models."gemini-3.1-pro-preview"]
+input_per_mtok        = 2.00
+cached_input_per_mtok = 0.20
+output_per_mtok       = 12.00
+
+[models."gemini-3-flash-preview"]
+input_per_mtok        = 0.50
+cached_input_per_mtok = 0.05
+output_per_mtok       = 3.00
+
+[models."gemini-2.5-pro"]
+input_per_mtok        = 1.25
+cached_input_per_mtok = 0.125
+output_per_mtok       = 10.00
+
+[models."gemini-2.5-flash"]
+input_per_mtok        = 0.30
+cached_input_per_mtok = 0.03
+output_per_mtok       = 2.50
+
+[models."gemini-2.5-flash-lite"]
+input_per_mtok        = 0.10
+cached_input_per_mtok = 0.01
+output_per_mtok       = 0.40
+
+# ---- Audio: STT (speech-to-text) ------------------------------------------
+# Billed by audio duration, not tokens. Rates may be written as
+# per_audio_hour / per_audio_minute / per_audio_second — whichever unit the
+# provider publishes — and are normalized to seconds at load. Set exactly ONE
+# per model; setting two is a load-time error rather than a silent mis-bill.
+
+# OpenAI Whisper. $0.006/min. Its verbose_json reports "duration" but no model
+# id, so callers must send X-Usage-Model for this to price.
+[models."whisper-1"]
+per_audio_minute = 0.006
+
+# OpenAI gpt-4o-transcribe family: STT billed in TOKENS, not seconds, which is
+# why these carry *_per_mtok despite being speech-to-text.
+[models."gpt-4o-transcribe"]
+input_per_mtok  = 2.50
+output_per_mtok = 10.00
+
+[models."gpt-4o-mini-transcribe"]
+input_per_mtok  = 1.25
+output_per_mtok = 5.00
+
+# Deepgram pay-as-you-go, from the published pricing table (2026-07).
+# NOTE: LiteLLM's public table still lists nova-3 at $0.258/hour and is stale —
+# do not "correct" these against it.
+# Monolingual vs multilingual differ by ~20% but Deepgram reports only the model
+# family in metadata.model_info, so a multilingual call may price at the
+# monolingual rate. Verify against the invoice before trusting the split.
+[models."nova-3"]
+per_audio_hour = 0.29
+
+[models."nova-3-multilingual"]
+per_audio_hour = 0.35
+
+[models."flux-english"]
+per_audio_hour = 0.39
+
+[models."flux-multilingual"]
+per_audio_hour = 0.47
+
+# ElevenLabs Scribe (STT), Creator plan: $0.22/hour for batch v1/v2. The
+# surcharges the response reveals (entity detection, speaker roles) are applied
+# as multipliers by the extractor, not added here.
+# NOTE: Scribe v2 Realtime is a different, higher tier ($0.39/hour) on the
+# streaming path; add a model entry for it when the WS meter reports its id.
+[models."scribe_v1"]
+per_audio_hour = 0.22
+
+# scribe_v2 is what pronunciation actually sends (scribe_transcription.go).
+[models."scribe_v2"]
+per_audio_hour = 0.22
+
+# ---- Audio: TTS (text-to-speech) ------------------------------------------
+# Billed per CHARACTER of submitted text, counted in runes (a multi-byte
+# character is one character). Metered from the request: a TTS response is raw
+# audio and reports no usage at all.
+#
+# ElevenLabs rates on OUR Creator plan (2026-07). Per 1K characters, flat across
+# every tier — the plan changes the included allowance, not the overage rate.
+# Model ids are the API's model_id values, read straight from the TTS request
+# body.
+
+[models."eleven_multilingual_v2"]
+per_1k_characters = 0.10
+
+[models."eleven_v3"]
+per_1k_characters = 0.10
+
+# Flash/Turbo are the low-latency tiers, at half the price.
+[models."eleven_flash_v2"]
+per_1k_characters = 0.05
+
+[models."eleven_flash_v2_5"]
+per_1k_characters = 0.05
+
+[models."eleven_turbo_v2"]
+per_1k_characters = 0.05
+
+[models."eleven_turbo_v2_5"]
+per_1k_characters = 0.05
+
+# Inworld — the voice agent's PRIMARY voice, and until the relay gained an Inworld
+# provider the single largest stream of unmetered TTS spend we had.
+#
+# The voice agent runs TTS-2: Flash as the primary, TTS-2 as fallback #1 at twice the
+# price (per its fallback config). These are OUR rates, unchanged from the
+# 1.5 tiers they replace; inworld.ai/pricing lists more (Creator: TTS-2 $20,
+# Flash $10 per 1M) — do not "correct" these against it. Model ids are the
+# API's modelId values, read from the request body.
+[models."inworld-tts-2-flash"]
+per_1k_characters = 0.005
+
+[models."inworld-tts-2"]
+per_1k_characters = 0.010
+
+# Deprecated by Inworld, kept for agents still on 1.5 mid-rollout: cost is
+# fixed at ingest, so an unlisted id is recorded unpriced for good.
+[models."inworld-tts-1.5-mini"]
+per_1k_characters = 0.005
+
+[models."inworld-tts-1.5-max"]
+per_1k_characters = 0.010
+
+# Deepgram Aura-2 (TTS) — the voice agent's TTS fallback #1, reached whenever Inworld
+# (the primary) fails. Aura-2 is a single flat tier: every voice bills at
+# $0.030/1k characters, which is why both entries carry the same rate.
+#
+# Absent until now, so every character Deepgram synthesised through the relay
+# was recorded as unpriced. Not a rare path: one Inworld gRPC reset flips the
+# rest of the session onto Aura-2, and the voice agent's own
+# session_cost_calculator.py DOES price it (through a deepgram TTS default) —
+# so the two ledgers disagreed on exactly those sessions.
+#
+# Lookup is an exact map, so listing a voice is the only thing that prices it:
+# switching the voice in the voice agent's fallback config silently goes unpriced
+# again. odysseus is what that config actually sends; andromeda is what its
+# older docs still name.
+[models."aura-2-odysseus-en"]
+per_1k_characters = 0.030
+
+[models."aura-2-andromeda-en"]
+per_1k_characters = 0.030
+
+# ---- Image generation -----------------------------------------------------
+# Billed in TOKENS, like LLM — each model returns a usage payload with input
+# (the text prompt) and output (the generated image) token counts. The output
+# tokens are IMAGE-modality tokens, priced far above text output, so each
+# model's output_per_mtok below IS its image-output rate. The row is tagged
+# modality=image (extract.OpenAIImageExtract / GeminiExtract) so image spend is
+# reported as image, never folded into LLM numbers.
+
+# OpenAI GPT-Image-1. Text input $5/1M, image output $40/1M. Image INPUT tokens
+# (edits only) bill at $10/1M and are not represented here — generations send
+# only text input. The /v1/images/generations response names no model, so
+# the agents service sends X-Usage-Model=gpt-image-1.
+[models."gpt-image-1"]
+input_per_mtok  = 5.00
+output_per_mtok = 40.00
+
+# Google Gemini image models (rates confirmed 2026-07-23). Input text and image
+# output tokens come from usageMetadata (candidatesTokensDetails). Image output
+# is billed far above text output — 3.1-flash-image is $60/1M out vs $7.50 for
+# the 3.6-flash text model — which is exactly why the modality must be tagged
+# and priced on its own rate. gemini-3.1-flash-image is "Nano Banana 2", the GA
+# endpoint the agents service generates through; the others are listed for completeness.
+[models."gemini-3.1-flash-image"]
+input_per_mtok  = 0.50
+output_per_mtok = 60.00
+
+[models."gemini-3.1-flash-lite-image"]
+input_per_mtok  = 0.25
+output_per_mtok = 30.00
+
+[models."gemini-3-pro-image"]
+input_per_mtok  = 2.00
+output_per_mtok = 120.00
+
+[models."gemini-2.5-flash-image"]
+input_per_mtok  = 0.30
+output_per_mtok = 30.00
+
+# --- OpenRouter (route /v1/relay/openrouter) ---
+# Ids are OpenRouter slugs and arrive verbatim in the response `model` field, so
+# they are the lookup key. Rates read from https://openrouter.ai/api/v1/models
+# on 2026-08-06.
+#
+# OpenRouter reprices independently of the upstream vendor and may route one slug
+# across several backing providers, so this drifts faster than a first-party
+# table. An unlisted slug is still metered — recorded with cost_known=false —
+# so a missing entry loses the cost, not the event.
+#
+# No separate cached-input rate is published for these; cached equals uncached so
+# the ledger cannot understate spend.
+
+[models."deepseek/deepseek-v4-flash"]
+input_per_mtok        = 0.0882
+cached_input_per_mtok = 0.0882
+output_per_mtok       = 0.1764
+
+[models."moonshotai/kimi-k3"]
+input_per_mtok        = 3.00
+cached_input_per_mtok = 3.00
+output_per_mtok       = 15.00
+
+[models."qwen/qwen3.8-max"]
+input_per_mtok        = 2.00
+cached_input_per_mtok = 2.00
+output_per_mtok       = 6.00

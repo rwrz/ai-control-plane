@@ -1,0 +1,11 @@
+-- How this row was obtained, which decides how much it can be trusted.
+--
+--   relayed   the control plane proxied the call and measured it from the
+--             provider's own bytes
+--   reported  a consumer asserted it, from its own client-side accounting
+--
+-- These must stay distinguishable rather than being silently mixed: "what we
+-- measured" and "what someone told us" answer different questions, and a
+-- reconciliation against a provider invoice is only meaningful for the first.
+-- Existing rows all predate reporting, so 'relayed' is the correct backfill.
+ALTER TABLE usage_events ADD COLUMN IF NOT EXISTS source TEXT NOT NULL DEFAULT 'relayed';
